@@ -44,7 +44,7 @@ end
 
 @[expose] public def testA1 := A.mk
 @[expose] public def testA2 : A := {}
--- Used to be "unknown constant B.mk"
+-- used to be "unknown constant B.mk"
 @[expose] public def testB1 := B.mk
 @[expose] public def testB2 : B := {}
 
