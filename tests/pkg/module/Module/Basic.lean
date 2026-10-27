@@ -375,6 +375,69 @@ constructor:
 #with_exporting
 #check StructWithPrivateCtor.mk
 
+/-! Tactics that select a constructor should respect private constructors as well. -/
+
+public inductive IndWithPrivateCtors where
+  | private a (x : Nat)
+  | private b (x : Nat)
+
+public inductive IndWithPrivateFirstCtor where
+  | private a (x : Nat)
+  | b (x : Nat)
+
+public inductive IndWithPrivateSecondCtor where
+  | a (x : Nat)
+  | private b (x : Nat)
+
+public inductive PropWithPrivateCtor : Prop where
+  | private intro
+
+#check (by constructor; exact 1 : StructWithPrivateCtor)
+
+/--
+error: Tactic `constructor` failed: constructor `StructWithPrivateCtor.mk✝` is marked as private
+
+⊢ StructWithPrivateCtor
+-/
+#guard_msgs in
+#with_exporting
+#check (by constructor; exact 1 : StructWithPrivateCtor)
+
+#check (by left; exact 1 : IndWithPrivateCtors)
+
+/--
+error: Tactic `left` failed: constructor `IndWithPrivateCtors.a✝` is marked as private
+
+⊢ IndWithPrivateCtors
+-/
+#guard_msgs in
+#with_exporting
+#check (by left; exact 1 : IndWithPrivateCtors)
+
+/-- info: IndWithPrivateFirstCtor.b 1 : IndWithPrivateFirstCtor -/
+#guard_msgs in
+#with_exporting
+#check (by constructor; exact 1 : IndWithPrivateFirstCtor)
+
+/-! `backward.privateInPublic` should not warn about a private constructor that is not selected. -/
+
+/--
+warning: Tactic `constructor` applied constructor `IndWithPrivateSecondCtor.a`, but `IndWithPrivateSecondCtor.b` also matches the goal.
+
+Hint: Use `constructor!` to apply the first matching constructor without this warning:
+  [apply] constructor!
+---
+info: IndWithPrivateSecondCtor.a 1 : IndWithPrivateSecondCtor
+-/
+#guard_msgs in
+set_option backward.privateInPublic true in
+#with_exporting
+#check (by constructor; exact 1 : IndWithPrivateSecondCtor)
+
+/-! Proofs are elaborated in the private scope. -/
+
+public theorem propWithPrivateCtor : PropWithPrivateCtor := by constructor
+
 /-! Private duplicate in public section should not panic. -/
 
 public section
@@ -590,55 +653,7 @@ public structure CustomMulT where
 public instance instHMulNatCustom : HMul Nat CustomMulT CustomMulT where
   hMul a b := { x := a + b.x }
 
-
 /-! Declaration-keyed extension entries of private declarations are not exported. -/
 
 structure PrivStruct where
   x : Nat
-
-/-! Realizations triggered only from proofs are not exported. -/
-
-@[expose] public def f_proof_realized : Nat → Nat
-  | 0 => 0
-  | n + 1 => f_proof_realized n
-
-theorem f_proof_realized_zero : f_proof_realized 0 = 0 := by rw [f_proof_realized.eq_1]
-
-/-!
-Equation theorems of a definition that can only be generated under a local option should be
-realizable from importing modules as well.
--/
-
-public inductive EqnOptWalk {V : Type} (adj : V → V → Prop) : V → V → Type
-  | nil {u : V} : EqnOptWalk adj u u
-  | cons {u v w : V} (h : adj u v) (p : EqnOptWalk adj v w) : EqnOptWalk adj u w
-
-namespace EqnOptWalk
-variable {V : Type} {adj : V → V → Prop}
-
-@[expose] public def getVert {u v : V} : EqnOptWalk adj u v → Nat → V
-  | nil, _ => u
-  | cons _ _, 0 => u
-  | cons _ q, n+1 => q.getVert n
-
-public theorem getVert_zero {u v : V} (p : EqnOptWalk adj u v) : p.getVert 0 = u := by
-  cases p <;> rfl
-
-@[expose] public def copy {u v u' v' : V} (p : EqnOptWalk adj u v) (hu : u = u') (hv : v = v') :
-    EqnOptWalk adj u' v' :=
-  hu ▸ hv ▸ p
-
-set_option backward.isDefEq.respectTransparency.types false in
-@[expose] public def drop {u v : V} (p : EqnOptWalk adj u v) (n : Nat) :
-    EqnOptWalk adj (p.getVert n) v :=
-  match p, n with
-  | .nil, _ => .nil
-  | p, 0 => p.copy (getVert_zero p).symm rfl
-  | .cons _ q, (n + 1) => q.drop n
-
-/-- Realizes the equation theorems of `drop`, but only inside a proof. -/
-theorem drop_eqns_realized : True := by
-  have := @drop.eq_1
-  trivial
-
-end EqnOptWalk
